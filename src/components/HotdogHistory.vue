@@ -26,7 +26,6 @@ watch(() => props.entries.length, () => {
 
 <template>
   <section class="panel">
-    <h2>History</h2>
     <p v-if="entries.length === 0" class="empty">No hot dogs logged yet.</p>
     <ul v-else ref="historyListRef" class="history">
       <li v-for="entry in entries" :key="entry.id" class="history-row">

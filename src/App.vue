@@ -5,10 +5,10 @@ import { RouterLink, RouterView } from 'vue-router'
 <template>
   <div class="app-shell">
     <header class="app-header">
-      <div class="brand">
+      <!-- <div class="brand">
         <span class="logo">🌭</span>
         <h1>RecOrder</h1>
-      </div>
+      </div> -->
       <nav class="nav">
         <RouterLink to="/" class="nav-link" active-class="active" exact-active-class="active">
           Log
@@ -37,6 +37,7 @@ import { RouterLink, RouterView } from 'vue-router'
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  flex-direction: row-reverse;
   justify-content: space-between;
   gap: 1rem;
   background: #ffffff;

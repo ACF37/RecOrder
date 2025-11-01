@@ -46,13 +46,6 @@ const handleReset = () => {
 
 <template>
   <section class="panel">
-    <div class="panel-header">
-      <h2>Log a hot dog</h2>
-      <button type="button" class="icon-button" @click="emit('openModal')" aria-label="Add custom topping">
-        <span aria-hidden="true">+</span>
-      </button>
-    </div>
-
     <form @submit.prevent="handleSubmit" class="form">
       <fieldset class="field">
         <legend>Toppings</legend>
@@ -66,6 +59,9 @@ const handleReset = () => {
             @click="toggleTopping(topping)"
           >
             {{ topping }}
+          </button>
+          <button type="button" class="topping-pill" @click="emit('openModal')" aria-label="Add custom topping">
+            <span aria-hidden="true">+ 追加</span>
           </button>
         </div>
       </fieldset>
