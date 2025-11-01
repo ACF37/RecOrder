@@ -1,11 +1,25 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useHotdogStore } from '../composables/useHotdogStore'
 
-const { totalHotdogs, uniqueToppingsUsed, toppingFrequency, topToppings } = useHotdogStore()
+const { totalHotdogs, uniqueToppingsUsed, toppingFrequency, topToppings, clearAllData } = useHotdogStore()
 
 const hasEntries = computed(() => totalHotdogs.value > 0)
 const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
+
+const isConfirmingDelete = ref(false)
+
+const handleClearAll = () => {
+  if (!isConfirmingDelete.value) {
+    isConfirmingDelete.value = true
+    setTimeout(() => {
+      isConfirmingDelete.value = false
+    }, 3000)
+    return
+  }
+  clearAllData()
+  isConfirmingDelete.value = false
+}
 </script>
 
 <template>
@@ -49,28 +63,44 @@ const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
         </li>
       </ul>
     </section>
+
+    <section class="panel danger-zone">
+      <h2>Danger Zone</h2>
+      <p class="warning-text">すべての記録とカスタムトッピングが削除されます。この操作は取り消せません。</p>
+      <button
+        class="delete-all-btn"
+        :class="{ confirming: isConfirmingDelete }"
+        @click="handleClearAll"
+      >
+        {{ isConfirmingDelete ? '本当に削除しますか？もう一度クリックして確認' : 'すべてのデータを削除' }}
+      </button>
+    </section>
   </section>
 </template>
 
 <style scoped>
 .stats-view {
-  display: grid;
-  gap: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: #f8fafc;
 }
 
 .panel {
   background: #ffffff;
-  border-radius: 16px;
-  padding: 1.75rem;
-  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.06);
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1rem;
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .panel h2 {
   margin: 0;
   color: #0f172a;
+  font-size: 1.1rem;
 }
 
 .stat-grid {
@@ -82,7 +112,7 @@ const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
 
 .stat-grid div {
   background: #f8fafc;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 1rem;
   display: flex;
   flex-direction: column;
@@ -116,7 +146,7 @@ const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
   justify-content: space-between;
   align-items: center;
   background: #f1f5f9;
-  border-radius: 12px;
+  border-radius: 8px;
   padding: 0.65rem 0.9rem;
   font-weight: 600;
   color: #0f172a;
@@ -159,9 +189,64 @@ const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
   color: #94a3b8;
 }
 
+.danger-zone {
+  border: 2px solid #fee2e2;
+  background: #fef2f2;
+}
+
+.danger-zone h2 {
+  color: #991b1b;
+}
+
+.warning-text {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #7f1d1d;
+  line-height: 1.5;
+}
+
+.delete-all-btn {
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.85rem 1.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.delete-all-btn:hover {
+  background: #b91c1c;
+}
+
+.delete-all-btn:active {
+  transform: scale(0.98);
+}
+
+.delete-all-btn.confirming {
+  background: #7f1d1d;
+  animation: pulse 0.5s ease-in-out infinite alternate;
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.02);
+  }
+}
+
 @media (max-width: 640px) {
   .panel {
-    padding: 1.25rem;
+    padding: 1rem;
+  }
+
+  .panel h2 {
+    font-size: 1rem;
   }
 
   .frequency-list li {

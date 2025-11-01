@@ -16,8 +16,9 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
-  background: linear-gradient(180deg, #e2e8f0 0%, #f8fafc 60%, #ffffff 100%);
+  height: 100vh;
+  overflow: hidden;
+  background: #f8fafc;
 }
 
 a {
@@ -26,7 +27,7 @@ a {
 }
 
 #app {
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 3rem 1.5rem 4rem;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }

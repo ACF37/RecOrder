@@ -29,7 +29,8 @@ import { RouterLink, RouterView } from 'vue-router'
 .app-shell {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  height: 100%;
+  overflow: hidden;
 }
 
 .app-header {
@@ -38,11 +39,10 @@ import { RouterLink, RouterView } from 'vue-router'
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  background: rgba(255, 255, 255, 0.85);
-  border-radius: 18px;
-  padding: 1.25rem 1.5rem;
-  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
+  background: #ffffff;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  flex-shrink: 0;
 }
 
 .brand {
@@ -86,7 +86,11 @@ import { RouterLink, RouterView } from 'vue-router'
 }
 
 .app-main {
-  min-height: 60vh;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 640px) {

@@ -111,9 +111,9 @@ export function useHotdogStore() {
     isInitialised = true
   }
 
-  const sortedEntries = computed(() =>
-    [...entries.value].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
-  )
+const sortedEntries = computed(() =>
+    [...entries.value].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
+)
 
   const totalHotdogs = computed(() => entries.value.length)
 
@@ -150,11 +150,19 @@ export function useHotdogStore() {
       createdAt: new Date().toISOString(),
       toppings: [...toppings],
     }
-    entries.value = [entry, ...entries.value]
+    entries.value.push(entry)
   }
 
   const deleteEntry = (id: string) => {
     entries.value = entries.value.filter((entry) => entry.id !== id)
+  }
+
+  const clearAllData = () => {
+    entries.value = []
+    toppingOptions.value = [...defaultToppings]
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(STORAGE_KEY)
+    }
   }
 
   return {
@@ -168,5 +176,6 @@ export function useHotdogStore() {
     ensureTopping,
     addEntry,
     deleteEntry,
+    clearAllData,
   }
 }
