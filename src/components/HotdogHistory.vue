@@ -30,7 +30,8 @@ watch(() => props.entries.length, () => {
     <ul v-else ref="historyListRef" class="history">
       <li v-for="entry in entries" :key="entry.id" class="history-row">
         <div class="history-toppings">
-          <span v-for="topping in entry.toppings" :key="topping" class="badge">{{ topping }}</span>
+          <span v-if="entry.toppings.length === 0" class="badge normal">🌭 ノーマル</span>
+          <span v-else v-for="topping in entry.toppings" :key="topping" class="badge">{{ topping }}</span>
         </div>
         <div class="history-footer">
           <span class="history-date">{{ formatDisplayTimestamp(entry.createdAt) }}</span>
@@ -107,6 +108,13 @@ watch(() => props.entries.length, () => {
   border-radius: 999px;
   padding: 0.3rem 0.75rem;
   font-size: 0.85rem;
+}
+
+.badge.normal {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 600;
+  border: 1px solid #fbbf24;
 }
 
 .empty {

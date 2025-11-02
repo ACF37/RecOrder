@@ -63,7 +63,7 @@ const load = () => {
                 .map((item) => (typeof item === 'string' ? item.trim() : ''))
                 .filter((item): item is string => item.length > 0)
             : []
-          if (toppings.length === 0) return null
+          // Allow empty toppings array for "normal" entries
           const createdAt = (() => {
             if (typeof entry.createdAt === 'string') {
               const parsedDate = new Date(entry.createdAt)
@@ -126,9 +126,14 @@ const sortedEntries = computed(() =>
   const toppingFrequency = computed(() => {
     const counts = new Map<string, number>()
     entries.value.forEach((entry) => {
-      entry.toppings.forEach((topping) => {
-        counts.set(topping, (counts.get(topping) ?? 0) + 1)
-      })
+      if (entry.toppings.length === 0) {
+        // Count normal (no topping) entries
+        counts.set('🌭 ノーマル', (counts.get('🌭 ノーマル') ?? 0) + 1)
+      } else {
+        entry.toppings.forEach((topping) => {
+          counts.set(topping, (counts.get(topping) ?? 0) + 1)
+        })
+      }
     })
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   })
@@ -144,14 +149,14 @@ const sortedEntries = computed(() =>
   }
 
   const addEntry = (toppings: string[]) => {
-    if (toppings.length === 0) return
-    
-    // Sort toppings by their order in toppingOptions
-    const sortedToppings = [...toppings].sort((a, b) => {
-      const indexA = toppingOptions.value.indexOf(a)
-      const indexB = toppingOptions.value.indexOf(b)
-      return indexA - indexB
-    })
+    // Sort toppings by their order in toppingOptions (if any toppings exist)
+    const sortedToppings = toppings.length > 0 
+      ? [...toppings].sort((a, b) => {
+          const indexA = toppingOptions.value.indexOf(a)
+          const indexB = toppingOptions.value.indexOf(b)
+          return indexA - indexB
+        })
+      : []
     
     const entry: HotdogEntry = {
       id: createId(),

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 
 interface Props {
   toppingOptions: string[]
@@ -17,7 +17,6 @@ const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const validationError = ref('')
-const formIsValid = computed(() => props.selectedToppings.length > 0)
 
 const toggleTopping = (name: string) => {
   const current = [...props.selectedToppings]
@@ -30,10 +29,6 @@ const toggleTopping = (name: string) => {
 }
 
 const handleSubmit = () => {
-  if (!formIsValid.value) {
-    validationError.value = 'Pick at least one topping before saving.'
-    return
-  }
   emit('submit')
   validationError.value = ''
 }
@@ -109,7 +104,7 @@ onUnmounted(() => {
       <p v-if="validationError" class="error">{{ validationError }}</p>
 
       <div class="form-actions">
-        <button type="submit" class="primary" :disabled="!formIsValid">Save hot dog</button>
+        <button type="submit" class="primary">Save hot dog</button>
         <button type="button" class="ghost" @click="handleReset">Reset</button>
       </div>
     </form>
