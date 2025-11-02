@@ -8,6 +8,8 @@ interface Props {
 
 interface Emits {
   (e: 'delete', id: string): void
+  (e: 'complete', id: string): void
+  (e: 'uncomplete', id: string): void
 }
 
 const props = defineProps<Props>()
@@ -28,14 +30,26 @@ watch(() => props.entries.length, () => {
   <section class="panel">
     <p v-if="entries.length === 0" class="empty">No hot dogs logged yet.</p>
     <ul v-else ref="historyListRef" class="history">
-      <li v-for="entry in entries" :key="entry.id" class="history-row">
+      <li 
+        v-for="entry in entries" 
+        :key="entry.id" 
+        class="history-row" 
+        :class="{ completed: entry.completed, pending: !entry.completed }"
+        @click="entry.completed ? emit('uncomplete', entry.id) : emit('complete', entry.id)"
+      >
         <div class="history-toppings">
           <span v-if="entry.toppings.length === 0" class="badge normal">🌭 ノーマル</span>
           <span v-else v-for="topping in entry.toppings" :key="topping" class="badge">{{ topping }}</span>
         </div>
         <div class="history-footer">
           <span class="history-date">{{ formatDisplayTimestamp(entry.createdAt) }}</span>
-          <button type="button" class="delete-btn" @click="emit('delete', entry.id)">削除</button>
+          <button 
+            type="button" 
+            class="delete-btn" 
+            @click.stop="emit('delete', entry.id)"
+          >
+            削除
+          </button>
         </div>
       </li>
     </ul>
@@ -81,6 +95,58 @@ watch(() => props.entries.length, () => {
   flex-direction: column;
   gap: 0.6rem;
   background: #fafbfc;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.history-row.pending {
+  cursor: pointer;
+  border: 2px solid #2563eb;
+}
+
+.history-row.pending:hover {
+  background: #eff6ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.15);
+}
+
+.history-row.pending::after {
+  content: '✓ タップで完了';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #2563eb;
+  color: white;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.history-row.completed {
+  opacity: 0.5;
+  background: #f1f5f9;
+  cursor: pointer;
+}
+
+.history-row.completed:hover {
+  opacity: 0.7;
+  background: #e2e8f0;
+}
+
+.history-row.completed::after {
+  content: '↶ タップで戻す';
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: #64748b;
+  color: white;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  pointer-events: none;
 }
 
 .history-footer {
@@ -131,6 +197,7 @@ watch(() => props.entries.length, () => {
   padding: 0.25rem 0.5rem;
   cursor: pointer;
   transition: color 0.2s ease;
+  z-index: 1;
 }
 
 .delete-btn:hover {

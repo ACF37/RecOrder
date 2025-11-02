@@ -4,9 +4,12 @@ export type HotdogEntry = {
   id: string
   createdAt: string
   toppings: string[]
+  completed?: boolean
+  completedAt?: string
 }
 
-const STORAGE_KEY = 'recorder.hotdogs.v1'
+const STORAGE_KEY = 'recorder.hotdogs.v2'
+const OLD_STORAGE_KEY = 'recorder.hotdogs.v1'
 
 const defaultToppings = [
   '🧀チーズ',
@@ -38,8 +41,21 @@ const persist = () => {
 
 const load = () => {
   if (typeof window === 'undefined') return
-  const raw = window.localStorage.getItem(STORAGE_KEY)
+  
+  // Try to load from new storage key first
+  let raw = window.localStorage.getItem(STORAGE_KEY)
+  let isOldFormat = false
+  
+  // If not found, try old storage key and migrate
+  if (!raw) {
+    raw = window.localStorage.getItem(OLD_STORAGE_KEY)
+    if (raw) {
+      isOldFormat = true
+    }
+  }
+  
   if (!raw) return
+  
   try {
     const parsed = JSON.parse(raw) as {
       entries?: Array<Partial<HotdogEntry> & { date?: string; toppings?: unknown }>
@@ -76,14 +92,41 @@ const load = () => {
             return null
           })()
           if (!createdAt) return null
-          return {
+          
+          const baseEntry = {
             id: typeof entry.id === 'string' && entry.id.length > 0 ? entry.id : createId(),
             createdAt,
             toppings,
           }
+          
+          // Add completion fields
+          if (isOldFormat) {
+            // Old format: mark all as completed
+            return {
+              ...baseEntry,
+              completed: true,
+              completedAt: createdAt,
+            }
+          } else {
+            // New format: preserve completion status
+            const result: HotdogEntry = baseEntry
+            if (typeof entry.completed === 'boolean') {
+              result.completed = entry.completed
+            }
+            if (typeof entry.completedAt === 'string') {
+              result.completedAt = entry.completedAt
+            }
+            return result
+          }
         })
         .filter((entry): entry is HotdogEntry => entry !== null)
       entries.value = normalised
+      
+      // If we migrated from old format, save to new format and remove old key
+      if (isOldFormat) {
+        persist()
+        window.localStorage.removeItem(OLD_STORAGE_KEY)
+      }
     }
   } catch (error) {
     console.error('Failed to load saved data', error)
@@ -189,11 +232,28 @@ const sortedEntries = computed(() =>
     entries.value = entries.value.filter((entry) => entry.id !== id)
   }
 
+  const completeEntry = (id: string) => {
+    const entry = entries.value.find((e) => e.id === id)
+    if (entry && !entry.completed) {
+      entry.completed = true
+      entry.completedAt = new Date().toISOString()
+    }
+  }
+
+  const uncompleteEntry = (id: string) => {
+    const entry = entries.value.find((e) => e.id === id)
+    if (entry && entry.completed) {
+      entry.completed = false
+      entry.completedAt = undefined
+    }
+  }
+
   const clearAllData = () => {
     entries.value = []
     toppingOptions.value = [...defaultToppings]
     if (typeof window !== 'undefined') {
       window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(OLD_STORAGE_KEY)
     }
   }
 
@@ -209,6 +269,8 @@ const sortedEntries = computed(() =>
     ensureTopping,
     addEntry,
     deleteEntry,
+    completeEntry,
+    uncompleteEntry,
     clearAllData,
   }
 }

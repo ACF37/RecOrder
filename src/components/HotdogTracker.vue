@@ -5,7 +5,7 @@ import HotdogForm from './HotdogForm.vue'
 import HotdogHistory from './HotdogHistory.vue'
 import AddToppingModal from './AddToppingModal.vue'
 
-const { toppingOptions, sortedEntries, addEntry, deleteEntry, ensureTopping } = useHotdogStore()
+const { toppingOptions, sortedEntries, addEntry, deleteEntry, completeEntry, uncompleteEntry, ensureTopping } = useHotdogStore()
 
 const selectedToppings = ref<string[]>([])
 const isModalOpen = ref(false)
@@ -17,6 +17,14 @@ const handleSubmit = () => {
 
 const handleReset = () => {
   selectedToppings.value = []
+}
+
+const handleComplete = (id: string) => {
+  completeEntry(id)
+}
+
+const handleUncomplete = (id: string) => {
+  uncompleteEntry(id)
 }
 
 const handleOpenModal = () => {
@@ -38,7 +46,7 @@ const handleConfirmTopping = (name: string) => {
 
 <template>
   <section class="tracker">
-    <HotdogHistory :entries="sortedEntries" @delete="deleteEntry" />
+    <HotdogHistory :entries="sortedEntries" @delete="deleteEntry" @complete="handleComplete" @uncomplete="handleUncomplete" />
 
     <HotdogForm
       :topping-options="toppingOptions"
