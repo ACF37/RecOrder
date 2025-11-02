@@ -145,10 +145,18 @@ const sortedEntries = computed(() =>
 
   const addEntry = (toppings: string[]) => {
     if (toppings.length === 0) return
+    
+    // Sort toppings by their order in toppingOptions
+    const sortedToppings = [...toppings].sort((a, b) => {
+      const indexA = toppingOptions.value.indexOf(a)
+      const indexB = toppingOptions.value.indexOf(b)
+      return indexA - indexB
+    })
+    
     const entry: HotdogEntry = {
       id: createId(),
       createdAt: new Date().toISOString(),
-      toppings: [...toppings],
+      toppings: sortedToppings,
     }
     entries.value.push(entry)
   }
