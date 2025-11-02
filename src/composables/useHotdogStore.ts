@@ -140,6 +140,25 @@ const sortedEntries = computed(() =>
 
   const topToppings = computed(() => toppingFrequency.value.slice(0, 3))
 
+  const hourlySales = computed(() => {
+    const hourCounts = new Map<number, number>()
+    entries.value.forEach((entry) => {
+      const date = new Date(entry.createdAt)
+      const hour = date.getHours()
+      hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1)
+    })
+    
+    // Create array with all 24 hours, filling in zeros for hours with no sales
+    const result: Array<{ hour: number; count: number }> = []
+    for (let hour = 0; hour < 24; hour++) {
+      result.push({
+        hour,
+        count: hourCounts.get(hour) ?? 0
+      })
+    }
+    return result
+  })
+
   const ensureTopping = (name: string) => {
     const trimmed = name.trim()
     if (!trimmed) return
@@ -186,6 +205,7 @@ const sortedEntries = computed(() =>
     uniqueToppingsUsed,
     toppingFrequency,
     topToppings,
+    hourlySales,
     ensureTopping,
     addEntry,
     deleteEntry,

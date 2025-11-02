@@ -2,10 +2,11 @@
 import { computed, ref } from 'vue'
 import { useHotdogStore } from '../composables/useHotdogStore'
 
-const { totalHotdogs, uniqueToppingsUsed, toppingFrequency, topToppings, clearAllData } = useHotdogStore()
+const { totalHotdogs, uniqueToppingsUsed, toppingFrequency, topToppings, hourlySales, clearAllData } = useHotdogStore()
 
 const hasEntries = computed(() => totalHotdogs.value > 0)
 const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
+const maxHourlySales = computed(() => Math.max(...hourlySales.value.map(h => h.count), 1))
 
 const isConfirmingDelete = ref(false)
 
@@ -47,6 +48,51 @@ const handleClearAll = () => {
           <span class="count">{{ count }}</span>
         </li>
       </ol>
+    </section>
+
+    <section class="panel">
+      <h2>Hourly Sales</h2>
+      <p v-if="!hasEntries" class="empty">No data to display yet.</p>
+      <div v-else class="chart-container">
+        <svg class="line-chart" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet">
+          <!-- Grid lines -->
+          <line v-for="i in 5" :key="`grid-${i}`" 
+            :x1="50" :y1="(i - 1) * 40 + 10" 
+            :x2="590" :y2="(i - 1) * 40 + 10" 
+            class="grid-line" />
+          
+          <!-- Y-axis labels -->
+          <text v-for="i in 5" :key="`y-label-${i}`"
+            :x="40" :y="(5 - i) * 40 + 15"
+            class="axis-label">
+            {{ Math.round((maxHourlySales / 4) * (i - 1)) }}
+          </text>
+          
+          <!-- Line path -->
+          <polyline
+            :points="hourlySales.map((d, i) => `${50 + (i * (540 / 23))},${170 - (d.count / maxHourlySales * 160)}`).join(' ')"
+            class="line-path"
+          />
+          
+          <!-- Data points -->
+          <circle
+            v-for="(d, i) in hourlySales"
+            :key="`point-${i}`"
+            :cx="50 + (i * (540 / 23))"
+            :cy="170 - (d.count / maxHourlySales * 160)"
+            :r="d.count > 0 ? 3 : 0"
+            class="data-point"
+          />
+          
+          <!-- X-axis labels (every 3 hours) -->
+          <text v-for="i in 8" :key="`x-label-${i}`"
+            :x="50 + ((i - 1) * 3 * (540 / 23))"
+            :y="190"
+            class="axis-label">
+            {{ (i - 1) * 3 }}h
+          </text>
+        </svg>
+      </div>
     </section>
 
     <section class="panel">
@@ -130,6 +176,42 @@ const handleClearAll = () => {
   font-size: 1.8rem;
   font-weight: 700;
   color: #0f172a;
+}
+
+.chart-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.line-chart {
+  width: 100%;
+  min-width: 500px;
+  height: auto;
+}
+
+.grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+}
+
+.axis-label {
+  fill: #64748b;
+  font-size: 10px;
+  text-anchor: middle;
+}
+
+.line-path {
+  fill: none;
+  stroke: #2563eb;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.data-point {
+  fill: #2563eb;
+  stroke: #ffffff;
+  stroke-width: 2;
 }
 
 .top-list {
