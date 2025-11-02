@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 
 interface Props {
   toppingOptions: string[]
@@ -42,6 +42,45 @@ const handleReset = () => {
   emit('reset')
   validationError.value = ''
 }
+
+const keyMap: Record<string, number> = {
+  'a': 0,
+  's': 1,
+  'd': 2,
+  'f': 3,
+  'g': 4,
+}
+
+const handleKeyPress = (event: KeyboardEvent) => {
+  const key = event.key.toLowerCase()
+  
+  // Handle Enter key for submit
+  if (key === 'enter') {
+    event.preventDefault()
+    handleSubmit()
+    return
+  }
+  
+  // Handle topping selection keys
+  if (key in keyMap) {
+    const index = keyMap[key]
+    if (index !== undefined) {
+      const topping = props.toppingOptions[index]
+      if (topping) {
+        event.preventDefault()
+        toggleTopping(topping)
+      }
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', handleKeyPress)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeyPress)
+})
 </script>
 
 <template>
@@ -51,14 +90,15 @@ const handleReset = () => {
         <legend>Toppings</legend>
         <div class="topping-list">
           <button
-            v-for="topping in toppingOptions"
+            v-for="(topping, index) in toppingOptions"
             :key="topping"
             type="button"
             class="topping-pill"
             :class="{ selected: selectedToppings.includes(topping) }"
             @click="toggleTopping(topping)"
           >
-            {{ topping }}
+            <span class="topping-text">{{ topping }}</span>
+            <span v-if="index < 5" class="shortcut-key">{{ Object.keys(keyMap)[index] }}</span>
           </button>
           <button type="button" class="topping-pill" @click="emit('openModal')" aria-label="Add custom topping">
             <span aria-hidden="true">+ 追加</span>
@@ -157,6 +197,9 @@ legend {
   transition: all 0.2s ease;
   cursor: pointer;
   font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .topping-pill:hover {
@@ -167,6 +210,30 @@ legend {
   background: #2563eb;
   border-color: #2563eb;
   color: #ffffff;
+}
+
+.topping-pill.selected .shortcut-key {
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.topping-text {
+  flex: 1;
+}
+
+.shortcut-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.25rem;
+  background: #e2e8f0;
+  color: #64748b;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 button {
