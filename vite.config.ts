@@ -17,8 +17,8 @@ export default defineConfig({
         background_color: '#e2e8f0',
         display: 'standalone',
         lang: 'ja',
-        scope: '/RecOrder/',
-        start_url: '/RecOrder/',
+        scope: '/',
+        start_url: '/',
         icons: [
           {
             src: 'logo.png',
@@ -42,5 +42,5 @@ export default defineConfig({
       },
     }),
   ],
-  base: '/RecOrder/',
+  base: '/',
 })

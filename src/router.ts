@@ -3,7 +3,7 @@ import LogView from './views/LogView.vue'
 import StatsView from './views/StatsView.vue'
 
 const router = createRouter({
-  history: createWebHistory('/RecOrder/'),
+  history: createWebHistory('/'),
   routes: [
     {
       path: '/',
