@@ -1,0 +1,549 @@
+import { ref, computed } from 'vue'
+import {
+  supabase,
+  type ToppingOption,
+  type HotdogEntryWithToppings,
+} from '../lib/supabase'
+
+// トッピングオプション
+export const toppingOptions = ref<ToppingOption[]>([])
+
+// ホットドッグエントリー
+export const entries = ref<HotdogEntryWithToppings[]>([])
+
+// ローディング状態
+export const loading = ref(false)
+export const error = ref<string | null>(null)
+
+// LocalStorage のキー（マイグレーション用）
+const STORAGE_KEY = 'recorder.hotdogs.v2'
+const OLD_STORAGE_KEY = 'recorder.hotdogs.v1'
+
+// 初期化: トッピングオプションを取得
+export async function initializeStore() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { data, error: fetchError } = await supabase
+      .from('topping_options')
+      .select('*')
+      .order('display_order', { ascending: true })
+
+    if (fetchError) throw fetchError
+
+    toppingOptions.value = data || []
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '初期化エラー'
+    console.error('初期化エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの取得（トッピング情報も結合）
+export async function fetchEntries() {
+  loading.value = true
+  error.value = null
+
+  try {
+    // 1回のクエリで全てを取得（JOIN使用）
+    const { data: entriesData, error: entriesError } = await supabase
+      .from('hotdog_entries')
+      .select(`
+        *,
+        entry_toppings (
+          topping_options (*)
+        )
+      `)
+      .order('created_at', { ascending: true })
+
+    if (entriesError) throw entriesError
+
+    // データを整形
+    const entriesWithToppings: HotdogEntryWithToppings[] = (entriesData || []).map((entry: any) => {
+      const toppings: ToppingOption[] = (entry.entry_toppings || [])
+        .map((et: any) => et.topping_options)
+        .filter(Boolean)
+        .sort((a: ToppingOption, b: ToppingOption) => a.display_order - b.display_order)
+
+      return {
+        id: entry.id,
+        created_at: entry.created_at,
+        completed: entry.completed,
+        completed_at: entry.completed_at,
+        user_id: entry.user_id,
+        toppings,
+      }
+    })
+
+    entries.value = entriesWithToppings
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー取得エラー'
+    console.error('エントリー取得エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの追加
+export async function addEntry(toppingIds: string[]) {
+  loading.value = true
+  error.value = null
+
+  try {
+    // 1. エントリーを作成
+    const { data: newEntry, error: entryError } = await supabase
+      .from('hotdog_entries')
+      .insert({
+        completed: false,
+        completed_at: null,
+      })
+      .select()
+      .single()
+
+    if (entryError) throw entryError
+
+    // 2. トッピングを関連付け
+    if (toppingIds.length > 0) {
+      const entryToppings = toppingIds.map((toppingId) => ({
+        entry_id: newEntry.id,
+        topping_id: toppingId,
+      }))
+
+      const { error: toppingsError } = await supabase
+        .from('entry_toppings')
+        .insert(entryToppings)
+
+      if (toppingsError) throw toppingsError
+    }
+
+    // 即座に再取得（リアルタイムより速い）
+    await fetchEntries()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー追加エラー'
+    console.error('エントリー追加エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの削除
+export async function deleteEntry(id: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: deleteError } = await supabase
+      .from('hotdog_entries')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) throw deleteError
+
+    // 即座に再取得
+    await fetchEntries()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー削除エラー'
+    console.error('エントリー削除エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの完了
+export async function completeEntry(id: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: updateError } = await supabase
+      .from('hotdog_entries')
+      .update({
+        completed: true,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (updateError) throw updateError
+
+    // 即座に再取得
+    await fetchEntries()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー完了エラー'
+    console.error('エントリー完了エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの未完了化
+export async function uncompleteEntry(id: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: updateError } = await supabase
+      .from('hotdog_entries')
+      .update({
+        completed: false,
+        completed_at: null,
+      })
+      .eq('id', id)
+
+    if (updateError) throw updateError
+
+    // 即座に再取得
+    await fetchEntries()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー未完了化エラー'
+    console.error('エントリー未完了化エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 全データの削除
+export async function clearAllData() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: deleteError } = await supabase
+      .from('hotdog_entries')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000') // 全件削除
+
+    if (deleteError) throw deleteError
+
+    entries.value = []
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '全削除エラー'
+    console.error('全削除エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// カスタムトッピングの追加
+export async function addCustomTopping(name: string, emoji: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    // 最大のdisplay_orderを取得
+    const { data: maxOrderData, error: maxOrderError } = await supabase
+      .from('topping_options')
+      .select('display_order')
+      .order('display_order', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (maxOrderError && maxOrderError.code !== 'PGRST116') {
+      // PGRST116 = no rows returned
+      throw maxOrderError
+    }
+
+    const nextOrder = maxOrderData ? maxOrderData.display_order + 1 : 1
+
+    // 新しいトッピングを追加
+    const { data: newTopping, error: insertError } = await supabase
+      .from('topping_options')
+      .insert({
+        name,
+        emoji,
+        display_order: nextOrder,
+      })
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    // ローカル状態に追加（リアルタイム更新待たずにすぐ反映）
+    if (newTopping) {
+      toppingOptions.value.push(newTopping)
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'トッピング追加エラー'
+    console.error('トッピング追加エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// ===== Computed Properties =====
+
+// ソート済みエントリー（完了済みが上、未完了が下、それぞれ古い順）
+export const sortedEntries = computed(() => {
+  return [...entries.value].sort((a, b) => {
+    // 未完了を下に（完了済みが上）
+    if (a.completed !== b.completed) {
+      return a.completed ? -1 : 1
+    }
+    // 同じ完了状態内では古い順（created_at 昇順）
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+})
+
+// 合計ホットドッグ数
+export const totalHotdogs = computed(() => entries.value.length)
+
+// ユニークなトッピング数
+export const uniqueToppingsUsed = computed(() => {
+  const bag = new Set<string>()
+  entries.value.forEach((entry) => {
+    entry.toppings.forEach((topping) => {
+      bag.add(`${topping.emoji} ${topping.name}`)
+    })
+  })
+  return bag.size
+})
+
+// トッピングの出現頻度
+export const toppingFrequency = computed(() => {
+  const frequency: Record<string, number> = {}
+
+  entries.value.forEach((entry) => {
+    if (entry.toppings.length === 0) {
+      frequency['🌭 ノーマル'] = (frequency['🌭 ノーマル'] || 0) + 1
+    } else {
+      entry.toppings.forEach((topping) => {
+        const key = `${topping.emoji} ${topping.name}`
+        frequency[key] = (frequency[key] || 0) + 1
+      })
+    }
+  })
+
+  return Object.entries(frequency)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }))
+})
+
+// トップ3トッピング
+export const topToppings = computed(() => toppingFrequency.value.slice(0, 3))
+
+// 時間ごとの売上（24時間）
+export const hourlySales = computed(() => {
+  const hourCounts = new Map<number, number>()
+  entries.value.forEach((entry) => {
+    const date = new Date(entry.created_at)
+    const hour = date.getHours()
+    hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1)
+  })
+
+  // Create array with all 24 hours, filling in zeros for hours with no sales
+  const result: Array<{ hour: number; count: number }> = []
+  for (let hour = 0; hour < 24; hour++) {
+    result.push({
+      hour,
+      count: hourCounts.get(hour) ?? 0,
+    })
+  }
+  return result
+})
+
+// ===== Real-time Subscriptions =====
+
+// デバウンス用タイマー
+let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// デバウンス付き再取得
+function debouncedFetchEntries() {
+  if (fetchDebounceTimer) {
+    clearTimeout(fetchDebounceTimer)
+  }
+  fetchDebounceTimer = setTimeout(() => {
+    fetchEntries()
+    fetchDebounceTimer = null
+  }, 300) // 300ms待ってから実行
+}
+
+// リアルタイム更新の購読（ポーリング方式にフォールバック可能）
+export function subscribeToEntries() {
+  console.log('🔵 Realtime: 接続試行中...')
+  
+  const channel = supabase
+    .channel('hotdog_entries_changes', {
+      config: {
+        broadcast: { self: true },
+      },
+    })
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'hotdog_entries',
+      },
+      (payload) => {
+        console.log('🟢 hotdog_entries 変更検知:', payload)
+        debouncedFetchEntries()
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'entry_toppings',
+      },
+      (payload) => {
+        console.log('🟢 entry_toppings 変更検知:', payload)
+        debouncedFetchEntries()
+      }
+    )
+    .subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('✅ Realtime: 接続成功 (postgres_changes)')
+      } else if (status === 'CHANNEL_ERROR') {
+        console.error('❌ Realtime: 接続エラー - ポーリングにフォールバック')
+        // Realtime が使えない場合はポーリングで代替
+        startPolling()
+      } else if (status === 'TIMED_OUT') {
+        console.error('⏱️ Realtime: タイムアウト - ポーリングにフォールバック')
+        startPolling()
+      } else {
+        console.log('🔵 Realtime ステータス:', status)
+      }
+    })
+
+  return channel
+}
+
+// フォールバック用のポーリング（10秒間隔）
+let pollingInterval: number | null = null
+
+function startPolling() {
+  if (pollingInterval) return // 既に開始済み
+  
+  console.log('🔄 ポーリングモード開始（10秒間隔）')
+  pollingInterval = window.setInterval(() => {
+    console.log('🔄 データ更新チェック...')
+    fetchEntries()
+  }, 10000) // 10秒ごと
+}
+
+export function stopPolling() {
+  if (pollingInterval) {
+    clearInterval(pollingInterval)
+    pollingInterval = null
+    console.log('⏹️ ポーリングモード停止')
+  }
+}
+
+// LocalStorage からのマイグレーション（初回のみ）
+export async function migrateFromLocalStorage() {
+  const v2Data = localStorage.getItem(STORAGE_KEY)
+  const v1Data = localStorage.getItem(OLD_STORAGE_KEY)
+
+  if (!v2Data && !v1Data) {
+    return // マイグレーション不要
+  }
+
+  loading.value = true
+  error.value = null
+
+  try {
+    let localEntries: any[] = []
+
+    if (v2Data) {
+      const parsed = JSON.parse(v2Data)
+      localEntries = parsed.entries || []
+    } else if (v1Data) {
+      const v1Entries = JSON.parse(v1Data)
+      localEntries = v1Entries.map((entry: any) => ({
+        ...entry,
+        completed: true,
+        completedAt: entry.createdAt,
+      }))
+    }
+
+    // Supabase にマイグレーション
+    for (const localEntry of localEntries) {
+      // トッピング名からIDを解決
+      const toppingIds = (localEntry.toppings || [])
+        .map((toppingName: string) => {
+          // 絵文字を除去して名前だけ抽出
+          const cleanName = toppingName.replace(/^[^\p{L}\p{N}]+/u, '').trim()
+          const option = toppingOptions.value.find(
+            (opt) =>
+              opt.name === cleanName ||
+              `${opt.emoji}${opt.name}` === toppingName ||
+              opt.name === toppingName
+          )
+          return option?.id
+        })
+        .filter(Boolean)
+
+      // エントリーを作成
+      const { data: newEntry, error: entryError } = await supabase
+        .from('hotdog_entries')
+        .insert({
+          created_at: localEntry.createdAt,
+          completed: localEntry.completed || false,
+          completed_at: localEntry.completedAt || null,
+        })
+        .select()
+        .single()
+
+      if (entryError) throw entryError
+
+      // トッピングを関連付け
+      if (toppingIds.length > 0) {
+        const entryToppings = toppingIds.map((toppingId: string) => ({
+          entry_id: newEntry.id,
+          topping_id: toppingId,
+        }))
+
+        const { error: toppingsError } = await supabase
+          .from('entry_toppings')
+          .insert(entryToppings)
+
+        if (toppingsError) throw toppingsError
+      }
+    }
+
+    // マイグレーション完了後、LocalStorageをクリア
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(OLD_STORAGE_KEY)
+
+    console.log('LocalStorageからSupabaseへのマイグレーション完了')
+
+    // エントリーを再取得
+    await fetchEntries()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'マイグレーションエラー'
+    console.error('マイグレーションエラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// タイムスタンプのフォーマット
+export function formatDisplayTimestamp(isoTimestamp: string) {
+  const parsed = new Date(isoTimestamp)
+  if (Number.isNaN(parsed.getTime())) return isoTimestamp
+  return parsed.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+// 後方互換性のため
+export function useHotdogStore() {
+  return {
+    entries,
+    toppingOptions,
+    sortedEntries,
+    totalHotdogs,
+    uniqueToppingsUsed,
+    toppingFrequency,
+    topToppings,
+    hourlySales,
+    loading,
+    error,
+  }
+}
