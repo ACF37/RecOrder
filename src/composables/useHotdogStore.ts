@@ -118,7 +118,8 @@ export async function addEntry(toppingIds: string[]) {
       if (toppingsError) throw toppingsError
     }
 
-    // リアルタイム更新が自動で反映
+    // 即座に再取得（リアルタイムより速い）
+    await fetchEntries()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'エントリー追加エラー'
     console.error('エントリー追加エラー:', e)
@@ -140,7 +141,8 @@ export async function deleteEntry(id: string) {
 
     if (deleteError) throw deleteError
 
-    // リアルタイム更新が自動で反映
+    // 即座に再取得
+    await fetchEntries()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'エントリー削除エラー'
     console.error('エントリー削除エラー:', e)
@@ -165,7 +167,8 @@ export async function completeEntry(id: string) {
 
     if (updateError) throw updateError
 
-    // リアルタイム更新が自動で反映
+    // 即座に再取得
+    await fetchEntries()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'エントリー完了エラー'
     console.error('エントリー完了エラー:', e)
@@ -190,7 +193,8 @@ export async function uncompleteEntry(id: string) {
 
     if (updateError) throw updateError
 
-    // リアルタイム更新が自動で反映
+    // 即座に再取得
+    await fetchEntries()
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'エントリー未完了化エラー'
     console.error('エントリー未完了化エラー:', e)
@@ -269,12 +273,14 @@ export async function addCustomTopping(name: string, emoji: string) {
 
 // ===== Computed Properties =====
 
-// ソート済みエントリー（未完了が上）
+// ソート済みエントリー（完了済みが上、未完了が下、それぞれ古い順）
 export const sortedEntries = computed(() => {
   return [...entries.value].sort((a, b) => {
+    // 未完了を下に（完了済みが上）
     if (a.completed !== b.completed) {
-      return a.completed ? 1 : -1
+      return a.completed ? -1 : 1
     }
+    // 同じ完了状態内では古い順（created_at 昇順）
     return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   })
 })
@@ -338,6 +344,20 @@ export const hourlySales = computed(() => {
 
 // ===== Real-time Subscriptions =====
 
+// デバウンス用タイマー
+let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+
+// デバウンス付き再取得
+function debouncedFetchEntries() {
+  if (fetchDebounceTimer) {
+    clearTimeout(fetchDebounceTimer)
+  }
+  fetchDebounceTimer = setTimeout(() => {
+    fetchEntries()
+    fetchDebounceTimer = null
+  }, 300) // 300ms待ってから実行
+}
+
 // リアルタイム更新の購読
 export function subscribeToEntries() {
   const channel = supabase
@@ -350,8 +370,8 @@ export function subscribeToEntries() {
         table: 'hotdog_entries',
       },
       () => {
-        // エントリーが変更されたら再取得
-        fetchEntries()
+        // デバウンス付きで再取得
+        debouncedFetchEntries()
       }
     )
     .on(
@@ -362,8 +382,8 @@ export function subscribeToEntries() {
         table: 'entry_toppings',
       },
       () => {
-        // トッピングが変更されたら再取得
-        fetchEntries()
+        // デバウンス付きで再取得
+        debouncedFetchEntries()
       }
     )
     .subscribe()
