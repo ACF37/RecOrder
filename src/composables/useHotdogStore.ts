@@ -1,138 +1,465 @@
-import { computed, effectScope, ref, watch } from 'vue'
+import { ref, computed } from 'vue'
+import {
+  supabase,
+  type ToppingOption,
+  type HotdogEntryWithToppings,
+} from '../lib/supabase'
 
-export type HotdogEntry = {
-  id: string
-  createdAt: string
-  toppings: string[]
-  completed?: boolean
-  completedAt?: string
-}
+// トッピングオプション
+export const toppingOptions = ref<ToppingOption[]>([])
 
+// ホットドッグエントリー
+export const entries = ref<HotdogEntryWithToppings[]>([])
+
+// ローディング状態
+export const loading = ref(false)
+export const error = ref<string | null>(null)
+
+// LocalStorage のキー（マイグレーション用）
 const STORAGE_KEY = 'recorder.hotdogs.v2'
 const OLD_STORAGE_KEY = 'recorder.hotdogs.v1'
 
-const defaultToppings = [
-  '🧀チーズ',
-  '🧅オニオン',
-  '🍅サルサ',
-  '🍛カレー',
-  '🍯ハチミツ',
-]
+// 初期化: トッピングオプションを取得
+export async function initializeStore() {
+  loading.value = true
+  error.value = null
 
-const entries = ref<HotdogEntry[]>([])
-const toppingOptions = ref<string[]>([...defaultToppings])
-
-let isInitialised = false
-const persistenceScope = effectScope()
-
-const createId = () =>
-  typeof crypto !== 'undefined' && 'randomUUID' in crypto
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-
-const persist = () => {
-  if (typeof window === 'undefined') return
-  const payload = {
-    entries: entries.value,
-    toppingOptions: toppingOptions.value,
-  }
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
-}
-
-const load = () => {
-  if (typeof window === 'undefined') return
-  
-  // Try to load from new storage key first
-  let raw = window.localStorage.getItem(STORAGE_KEY)
-  let isOldFormat = false
-  
-  // If not found, try old storage key and migrate
-  if (!raw) {
-    raw = window.localStorage.getItem(OLD_STORAGE_KEY)
-    if (raw) {
-      isOldFormat = true
-    }
-  }
-  
-  if (!raw) return
-  
   try {
-    const parsed = JSON.parse(raw) as {
-      entries?: Array<Partial<HotdogEntry> & { date?: string; toppings?: unknown }>
-      toppingOptions?: unknown
-    }
+    const { data, error: fetchError } = await supabase
+      .from('topping_options')
+      .select('*')
+      .order('display_order', { ascending: true })
 
-    if (Array.isArray(parsed.toppingOptions)) {
-      const cleaned = parsed.toppingOptions
-        .map((item) => (typeof item === 'string' ? item.trim() : ''))
-        .filter((item) => item.length > 0)
-      if (cleaned.length > 0) {
-        toppingOptions.value = Array.from(new Set(cleaned)).sort((a, b) => a.localeCompare(b))
-      }
-    }
+    if (fetchError) throw fetchError
 
-    if (Array.isArray(parsed.entries)) {
-      const normalised = parsed.entries
-        .map((entry) => {
-          const toppings = Array.isArray(entry.toppings)
-            ? entry.toppings
-                .map((item) => (typeof item === 'string' ? item.trim() : ''))
-                .filter((item): item is string => item.length > 0)
-            : []
-          // Allow empty toppings array for "normal" entries
-          const createdAt = (() => {
-            if (typeof entry.createdAt === 'string') {
-              const parsedDate = new Date(entry.createdAt)
-              if (!Number.isNaN(parsedDate.getTime())) return parsedDate.toISOString()
-            }
-            if (typeof entry.date === 'string') {
-              const parsedDate = new Date(`${entry.date}T12:00:00`)
-              if (!Number.isNaN(parsedDate.getTime())) return parsedDate.toISOString()
-            }
-            return null
-          })()
-          if (!createdAt) return null
-          
-          const baseEntry = {
-            id: typeof entry.id === 'string' && entry.id.length > 0 ? entry.id : createId(),
-            createdAt,
-            toppings,
-          }
-          
-          // Add completion fields
-          if (isOldFormat) {
-            // Old format: mark all as completed
-            return {
-              ...baseEntry,
-              completed: true,
-              completedAt: createdAt,
-            }
-          } else {
-            // New format: preserve completion status
-            const result: HotdogEntry = baseEntry
-            if (typeof entry.completed === 'boolean') {
-              result.completed = entry.completed
-            }
-            if (typeof entry.completedAt === 'string') {
-              result.completedAt = entry.completedAt
-            }
-            return result
-          }
-        })
-        .filter((entry): entry is HotdogEntry => entry !== null)
-      entries.value = normalised
-      
-      // If we migrated from old format, save to new format and remove old key
-      if (isOldFormat) {
-        persist()
-        window.localStorage.removeItem(OLD_STORAGE_KEY)
-      }
-    }
-  } catch (error) {
-    console.error('Failed to load saved data', error)
+    toppingOptions.value = data || []
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '初期化エラー'
+    console.error('初期化エラー:', e)
+  } finally {
+    loading.value = false
   }
 }
 
+// エントリーの取得（トッピング情報も結合）
+export async function fetchEntries() {
+  loading.value = true
+  error.value = null
+
+  try {
+    // 1回のクエリで全てを取得（JOIN使用）
+    const { data: entriesData, error: entriesError } = await supabase
+      .from('hotdog_entries')
+      .select(`
+        *,
+        entry_toppings (
+          topping_options (*)
+        )
+      `)
+      .order('created_at', { ascending: true })
+
+    if (entriesError) throw entriesError
+
+    // データを整形
+    const entriesWithToppings: HotdogEntryWithToppings[] = (entriesData || []).map((entry: any) => {
+      const toppings: ToppingOption[] = (entry.entry_toppings || [])
+        .map((et: any) => et.topping_options)
+        .filter(Boolean)
+        .sort((a: ToppingOption, b: ToppingOption) => a.display_order - b.display_order)
+
+      return {
+        id: entry.id,
+        created_at: entry.created_at,
+        completed: entry.completed,
+        completed_at: entry.completed_at,
+        user_id: entry.user_id,
+        toppings,
+      }
+    })
+
+    entries.value = entriesWithToppings
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー取得エラー'
+    console.error('エントリー取得エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの追加
+export async function addEntry(toppingIds: string[]) {
+  loading.value = true
+  error.value = null
+
+  try {
+    // 1. エントリーを作成
+    const { data: newEntry, error: entryError } = await supabase
+      .from('hotdog_entries')
+      .insert({
+        completed: false,
+        completed_at: null,
+      })
+      .select()
+      .single()
+
+    if (entryError) throw entryError
+
+    // 2. トッピングを関連付け
+    if (toppingIds.length > 0) {
+      const entryToppings = toppingIds.map((toppingId) => ({
+        entry_id: newEntry.id,
+        topping_id: toppingId,
+      }))
+
+      const { error: toppingsError } = await supabase
+        .from('entry_toppings')
+        .insert(entryToppings)
+
+      if (toppingsError) throw toppingsError
+    }
+
+    // リアルタイム更新が自動で反映
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー追加エラー'
+    console.error('エントリー追加エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの削除
+export async function deleteEntry(id: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: deleteError } = await supabase
+      .from('hotdog_entries')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) throw deleteError
+
+    // リアルタイム更新が自動で反映
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー削除エラー'
+    console.error('エントリー削除エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの完了
+export async function completeEntry(id: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: updateError } = await supabase
+      .from('hotdog_entries')
+      .update({
+        completed: true,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+
+    if (updateError) throw updateError
+
+    // リアルタイム更新が自動で反映
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー完了エラー'
+    console.error('エントリー完了エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// エントリーの未完了化
+export async function uncompleteEntry(id: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: updateError } = await supabase
+      .from('hotdog_entries')
+      .update({
+        completed: false,
+        completed_at: null,
+      })
+      .eq('id', id)
+
+    if (updateError) throw updateError
+
+    // リアルタイム更新が自動で反映
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'エントリー未完了化エラー'
+    console.error('エントリー未完了化エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 全データの削除
+export async function clearAllData() {
+  loading.value = true
+  error.value = null
+
+  try {
+    const { error: deleteError } = await supabase
+      .from('hotdog_entries')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000') // 全件削除
+
+    if (deleteError) throw deleteError
+
+    entries.value = []
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '全削除エラー'
+    console.error('全削除エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// カスタムトッピングの追加
+export async function addCustomTopping(name: string, emoji: string) {
+  loading.value = true
+  error.value = null
+
+  try {
+    // 最大のdisplay_orderを取得
+    const { data: maxOrderData, error: maxOrderError } = await supabase
+      .from('topping_options')
+      .select('display_order')
+      .order('display_order', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (maxOrderError && maxOrderError.code !== 'PGRST116') {
+      // PGRST116 = no rows returned
+      throw maxOrderError
+    }
+
+    const nextOrder = maxOrderData ? maxOrderData.display_order + 1 : 1
+
+    // 新しいトッピングを追加
+    const { data: newTopping, error: insertError } = await supabase
+      .from('topping_options')
+      .insert({
+        name,
+        emoji,
+        display_order: nextOrder,
+      })
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    // ローカル状態に追加（リアルタイム更新待たずにすぐ反映）
+    if (newTopping) {
+      toppingOptions.value.push(newTopping)
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'トッピング追加エラー'
+    console.error('トッピング追加エラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// ===== Computed Properties =====
+
+// ソート済みエントリー（未完了が上）
+export const sortedEntries = computed(() => {
+  return [...entries.value].sort((a, b) => {
+    if (a.completed !== b.completed) {
+      return a.completed ? 1 : -1
+    }
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  })
+})
+
+// 合計ホットドッグ数
+export const totalHotdogs = computed(() => entries.value.length)
+
+// ユニークなトッピング数
+export const uniqueToppingsUsed = computed(() => {
+  const bag = new Set<string>()
+  entries.value.forEach((entry) => {
+    entry.toppings.forEach((topping) => {
+      bag.add(`${topping.emoji} ${topping.name}`)
+    })
+  })
+  return bag.size
+})
+
+// トッピングの出現頻度
+export const toppingFrequency = computed(() => {
+  const frequency: Record<string, number> = {}
+
+  entries.value.forEach((entry) => {
+    if (entry.toppings.length === 0) {
+      frequency['🌭 ノーマル'] = (frequency['🌭 ノーマル'] || 0) + 1
+    } else {
+      entry.toppings.forEach((topping) => {
+        const key = `${topping.emoji} ${topping.name}`
+        frequency[key] = (frequency[key] || 0) + 1
+      })
+    }
+  })
+
+  return Object.entries(frequency)
+    .sort((a, b) => b[1] - a[1])
+    .map(([name, count]) => ({ name, count }))
+})
+
+// トップ3トッピング
+export const topToppings = computed(() => toppingFrequency.value.slice(0, 3))
+
+// 時間ごとの売上（24時間）
+export const hourlySales = computed(() => {
+  const hourCounts = new Map<number, number>()
+  entries.value.forEach((entry) => {
+    const date = new Date(entry.created_at)
+    const hour = date.getHours()
+    hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1)
+  })
+
+  // Create array with all 24 hours, filling in zeros for hours with no sales
+  const result: Array<{ hour: number; count: number }> = []
+  for (let hour = 0; hour < 24; hour++) {
+    result.push({
+      hour,
+      count: hourCounts.get(hour) ?? 0,
+    })
+  }
+  return result
+})
+
+// ===== Real-time Subscriptions =====
+
+// リアルタイム更新の購読
+export function subscribeToEntries() {
+  const channel = supabase
+    .channel('hotdog_entries_changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'hotdog_entries',
+      },
+      () => {
+        // エントリーが変更されたら再取得
+        fetchEntries()
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'entry_toppings',
+      },
+      () => {
+        // トッピングが変更されたら再取得
+        fetchEntries()
+      }
+    )
+    .subscribe()
+
+  return channel
+}
+
+// LocalStorage からのマイグレーション（初回のみ）
+export async function migrateFromLocalStorage() {
+  const v2Data = localStorage.getItem(STORAGE_KEY)
+  const v1Data = localStorage.getItem(OLD_STORAGE_KEY)
+
+  if (!v2Data && !v1Data) {
+    return // マイグレーション不要
+  }
+
+  loading.value = true
+  error.value = null
+
+  try {
+    let localEntries: any[] = []
+
+    if (v2Data) {
+      const parsed = JSON.parse(v2Data)
+      localEntries = parsed.entries || []
+    } else if (v1Data) {
+      const v1Entries = JSON.parse(v1Data)
+      localEntries = v1Entries.map((entry: any) => ({
+        ...entry,
+        completed: true,
+        completedAt: entry.createdAt,
+      }))
+    }
+
+    // Supabase にマイグレーション
+    for (const localEntry of localEntries) {
+      // トッピング名からIDを解決
+      const toppingIds = (localEntry.toppings || [])
+        .map((toppingName: string) => {
+          // 絵文字を除去して名前だけ抽出
+          const cleanName = toppingName.replace(/^[^\p{L}\p{N}]+/u, '').trim()
+          const option = toppingOptions.value.find(
+            (opt) =>
+              opt.name === cleanName ||
+              `${opt.emoji}${opt.name}` === toppingName ||
+              opt.name === toppingName
+          )
+          return option?.id
+        })
+        .filter(Boolean)
+
+      // エントリーを作成
+      const { data: newEntry, error: entryError } = await supabase
+        .from('hotdog_entries')
+        .insert({
+          created_at: localEntry.createdAt,
+          completed: localEntry.completed || false,
+          completed_at: localEntry.completedAt || null,
+        })
+        .select()
+        .single()
+
+      if (entryError) throw entryError
+
+      // トッピングを関連付け
+      if (toppingIds.length > 0) {
+        const entryToppings = toppingIds.map((toppingId: string) => ({
+          entry_id: newEntry.id,
+          topping_id: toppingId,
+        }))
+
+        const { error: toppingsError } = await supabase
+          .from('entry_toppings')
+          .insert(entryToppings)
+
+        if (toppingsError) throw toppingsError
+      }
+    }
+
+    // マイグレーション完了後、LocalStorageをクリア
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(OLD_STORAGE_KEY)
+
+    console.log('LocalStorageからSupabaseへのマイグレーション完了')
+
+    // エントリーを再取得
+    await fetchEntries()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'マイグレーションエラー'
+    console.error('マイグレーションエラー:', e)
+  } finally {
+    loading.value = false
+  }
+}
+
+// タイムスタンプのフォーマット
 export function formatDisplayTimestamp(isoTimestamp: string) {
   const parsed = new Date(isoTimestamp)
   if (Number.isNaN(parsed.getTime())) return isoTimestamp
@@ -145,118 +472,8 @@ export function formatDisplayTimestamp(isoTimestamp: string) {
   })
 }
 
+// 後方互換性のため
 export function useHotdogStore() {
-  if (!isInitialised) {
-    load()
-    persistenceScope.run(() => {
-      watch([entries, toppingOptions], persist, { deep: true })
-    })
-    isInitialised = true
-  }
-
-const sortedEntries = computed(() =>
-    [...entries.value].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id))
-)
-
-  const totalHotdogs = computed(() => entries.value.length)
-
-  const uniqueToppingsUsed = computed(() => {
-    const bag = new Set<string>()
-    entries.value.forEach((entry) => entry.toppings.forEach((topping) => bag.add(topping)))
-    return bag.size
-  })
-
-  const toppingFrequency = computed(() => {
-    const counts = new Map<string, number>()
-    entries.value.forEach((entry) => {
-      if (entry.toppings.length === 0) {
-        // Count normal (no topping) entries
-        counts.set('🌭 ノーマル', (counts.get('🌭 ノーマル') ?? 0) + 1)
-      } else {
-        entry.toppings.forEach((topping) => {
-          counts.set(topping, (counts.get(topping) ?? 0) + 1)
-        })
-      }
-    })
-    return [...counts.entries()].sort((a, b) => b[1] - a[1])
-  })
-
-  const topToppings = computed(() => toppingFrequency.value.slice(0, 3))
-
-  const hourlySales = computed(() => {
-    const hourCounts = new Map<number, number>()
-    entries.value.forEach((entry) => {
-      const date = new Date(entry.createdAt)
-      const hour = date.getHours()
-      hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1)
-    })
-    
-    // Create array with all 24 hours, filling in zeros for hours with no sales
-    const result: Array<{ hour: number; count: number }> = []
-    for (let hour = 0; hour < 24; hour++) {
-      result.push({
-        hour,
-        count: hourCounts.get(hour) ?? 0
-      })
-    }
-    return result
-  })
-
-  const ensureTopping = (name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) return
-    if (!toppingOptions.value.includes(trimmed)) {
-      toppingOptions.value = [...toppingOptions.value, trimmed].sort((a, b) => a.localeCompare(b))
-    }
-  }
-
-  const addEntry = (toppings: string[]) => {
-    // Sort toppings by their order in toppingOptions (if any toppings exist)
-    const sortedToppings = toppings.length > 0 
-      ? [...toppings].sort((a, b) => {
-          const indexA = toppingOptions.value.indexOf(a)
-          const indexB = toppingOptions.value.indexOf(b)
-          return indexA - indexB
-        })
-      : []
-    
-    const entry: HotdogEntry = {
-      id: createId(),
-      createdAt: new Date().toISOString(),
-      toppings: sortedToppings,
-    }
-    entries.value.push(entry)
-  }
-
-  const deleteEntry = (id: string) => {
-    entries.value = entries.value.filter((entry) => entry.id !== id)
-  }
-
-  const completeEntry = (id: string) => {
-    const entry = entries.value.find((e) => e.id === id)
-    if (entry && !entry.completed) {
-      entry.completed = true
-      entry.completedAt = new Date().toISOString()
-    }
-  }
-
-  const uncompleteEntry = (id: string) => {
-    const entry = entries.value.find((e) => e.id === id)
-    if (entry && entry.completed) {
-      entry.completed = false
-      entry.completedAt = undefined
-    }
-  }
-
-  const clearAllData = () => {
-    entries.value = []
-    toppingOptions.value = [...defaultToppings]
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(STORAGE_KEY)
-      window.localStorage.removeItem(OLD_STORAGE_KEY)
-    }
-  }
-
   return {
     entries,
     toppingOptions,
@@ -266,11 +483,7 @@ const sortedEntries = computed(() =>
     toppingFrequency,
     topToppings,
     hourlySales,
-    ensureTopping,
-    addEntry,
-    deleteEntry,
-    completeEntry,
-    uncompleteEntry,
-    clearAllData,
+    loading,
+    error,
   }
 }

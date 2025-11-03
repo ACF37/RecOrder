@@ -1,5 +1,26 @@
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
+import {
+  initializeStore,
+  fetchEntries,
+  subscribeToEntries,
+  migrateFromLocalStorage,
+} from './composables/useHotdogStore'
+
+onMounted(async () => {
+  // 1. トッピングオプションを取得
+  await initializeStore()
+  
+  // 2. LocalStorageからのマイグレーション（初回のみ）
+  await migrateFromLocalStorage()
+  
+  // 3. エントリーを取得
+  await fetchEntries()
+  
+  // 4. リアルタイム更新の購読
+  subscribeToEntries()
+})
 </script>
 
 <template>

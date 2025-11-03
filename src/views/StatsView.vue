@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { useHotdogStore } from '../composables/useHotdogStore'
-
-const { totalHotdogs, uniqueToppingsUsed, toppingFrequency, topToppings, hourlySales, clearAllData } = useHotdogStore()
+import {
+  totalHotdogs,
+  uniqueToppingsUsed,
+  toppingFrequency,
+  topToppings,
+  hourlySales,
+  clearAllData,
+} from '../composables/useHotdogStore'
 
 const hasEntries = computed(() => totalHotdogs.value > 0)
-const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.[1] ?? 0))
+const maxFrequencyCount = computed(() => (toppingFrequency.value[0]?.count ?? 0))
 const maxHourlySales = computed(() => Math.max(...hourlySales.value.map(h => h.count), 1))
 
 const isConfirmingDelete = ref(false)
 
-const handleClearAll = () => {
+const handleClearAll = async () => {
   if (!isConfirmingDelete.value) {
     isConfirmingDelete.value = true
     setTimeout(() => {
@@ -18,7 +23,7 @@ const handleClearAll = () => {
     }, 3000)
     return
   }
-  clearAllData()
+  await clearAllData()
   isConfirmingDelete.value = false
 }
 </script>
@@ -43,9 +48,9 @@ const handleClearAll = () => {
       <h2>Top toppings</h2>
       <p v-if="!hasEntries" class="empty">Log a hot dog to see your stats.</p>
       <ol v-else class="top-list">
-        <li v-for="[topping, count] in topToppings" :key="topping">
-          <span>{{ topping }}</span>
-          <span class="count">{{ count }}</span>
+        <li v-for="item in topToppings" :key="item.name">
+          <span>{{ item.name }}</span>
+          <span class="count">{{ item.count }}</span>
         </li>
       </ol>
     </section>
@@ -99,13 +104,13 @@ const handleClearAll = () => {
       <h2>All toppings</h2>
       <p v-if="!hasEntries" class="empty">No toppings recorded yet.</p>
       <ul v-else class="frequency-list">
-        <li v-for="[topping, count] in toppingFrequency" :key="topping">
-          <span class="label">{{ topping }}</span>
+        <li v-for="item in toppingFrequency" :key="item.name">
+          <span class="label">{{ item.name }}</span>
           <span
             class="bar"
-            :style="{ width: maxFrequencyCount ? `${Math.max((count / maxFrequencyCount) * 100, 8)}%` : '8%' }"
+            :style="{ width: maxFrequencyCount ? `${Math.max((item.count / maxFrequencyCount) * 100, 8)}%` : '8%' }"
           ></span>
-          <span class="count">{{ count }}</span>
+          <span class="count">{{ item.count }}</span>
         </li>
       </ul>
     </section>

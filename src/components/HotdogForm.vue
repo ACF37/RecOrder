@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
+import type { ToppingOption } from '../lib/supabase'
 
 interface Props {
-  toppingOptions: string[]
+  toppingOptions: ToppingOption[]
   selectedToppings: string[]
 }
 
@@ -18,12 +19,12 @@ const emit = defineEmits<Emits>()
 
 const validationError = ref('')
 
-const toggleTopping = (name: string) => {
+const toggleTopping = (id: string) => {
   const current = [...props.selectedToppings]
-  if (current.includes(name)) {
-    emit('update:selectedToppings', current.filter((item) => item !== name))
+  if (current.includes(id)) {
+    emit('update:selectedToppings', current.filter((item) => item !== id))
   } else {
-    emit('update:selectedToppings', [...current, name])
+    emit('update:selectedToppings', [...current, id])
   }
   validationError.value = ''
 }
@@ -63,7 +64,7 @@ const handleKeyPress = (event: KeyboardEvent) => {
       const topping = props.toppingOptions[index]
       if (topping) {
         event.preventDefault()
-        toggleTopping(topping)
+        toggleTopping(topping.id)
       }
     }
   }
@@ -86,13 +87,13 @@ onUnmounted(() => {
         <div class="topping-list">
           <button
             v-for="(topping, index) in toppingOptions"
-            :key="topping"
+            :key="topping.id"
             type="button"
             class="topping-pill"
-            :class="{ selected: selectedToppings.includes(topping) }"
-            @click="toggleTopping(topping)"
+            :class="{ selected: selectedToppings.includes(topping.id) }"
+            @click="toggleTopping(topping.id)"
           >
-            <span class="topping-text">{{ topping }}</span>
+            <span class="topping-text">{{ topping.emoji }} {{ topping.name }}</span>
             <span v-if="index < 5" class="shortcut-key">{{ Object.keys(keyMap)[index] }}</span>
           </button>
           <button type="button" class="topping-pill" @click="emit('openModal')" aria-label="Add custom topping">

@@ -1,17 +1,23 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { useHotdogStore } from '../composables/useHotdogStore'
+import {
+  toppingOptions,
+  sortedEntries,
+  addEntry,
+  deleteEntry,
+  completeEntry,
+  uncompleteEntry,
+  addCustomTopping,
+} from '../composables/useHotdogStore'
 import HotdogForm from './HotdogForm.vue'
 import HotdogHistory from './HotdogHistory.vue'
 import AddToppingModal from './AddToppingModal.vue'
 
-const { toppingOptions, sortedEntries, addEntry, deleteEntry, completeEntry, uncompleteEntry, ensureTopping } = useHotdogStore()
-
 const selectedToppings = ref<string[]>([])
 const isModalOpen = ref(false)
 
-const handleSubmit = () => {
-  addEntry(selectedToppings.value)
+const handleSubmit = async () => {
+  await addEntry(selectedToppings.value)
   selectedToppings.value = []
 }
 
@@ -19,12 +25,16 @@ const handleReset = () => {
   selectedToppings.value = []
 }
 
-const handleComplete = (id: string) => {
-  completeEntry(id)
+const handleComplete = async (id: string) => {
+  await completeEntry(id)
 }
 
-const handleUncomplete = (id: string) => {
-  uncompleteEntry(id)
+const handleUncomplete = async (id: string) => {
+  await uncompleteEntry(id)
+}
+
+const handleDelete = async (id: string) => {
+  await deleteEntry(id)
 }
 
 const handleOpenModal = () => {
@@ -35,10 +45,12 @@ const handleCloseModal = () => {
   isModalOpen.value = false
 }
 
-const handleConfirmTopping = (name: string) => {
-  ensureTopping(name)
-  if (!selectedToppings.value.includes(name)) {
-    selectedToppings.value = [...selectedToppings.value, name]
+const handleConfirmTopping = async (name: string, emoji: string) => {
+  await addCustomTopping(name, emoji)
+  // 新しく追加されたトッピングのIDを取得して選択
+  const newTopping = toppingOptions.value.find((opt) => opt.name === name && opt.emoji === emoji)
+  if (newTopping && !selectedToppings.value.includes(newTopping.id)) {
+    selectedToppings.value = [...selectedToppings.value, newTopping.id]
   }
   isModalOpen.value = false
 }
@@ -46,7 +58,7 @@ const handleConfirmTopping = (name: string) => {
 
 <template>
   <section class="tracker">
-    <HotdogHistory :entries="sortedEntries" @delete="deleteEntry" @complete="handleComplete" @uncomplete="handleUncomplete" />
+    <HotdogHistory :entries="sortedEntries" @delete="handleDelete" @complete="handleComplete" @uncomplete="handleUncomplete" />
 
     <HotdogForm
       :topping-options="toppingOptions"

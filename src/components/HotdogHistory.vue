@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
-import { formatDisplayTimestamp, type HotdogEntry } from '../composables/useHotdogStore'
+import { formatDisplayTimestamp } from '../composables/useHotdogStore'
+import type { HotdogEntryWithToppings } from '../lib/supabase'
 
 interface Props {
-  entries: HotdogEntry[]
+  entries: HotdogEntryWithToppings[]
 }
 
 interface Emits {
@@ -39,10 +40,10 @@ watch(() => props.entries.length, () => {
       >
         <div class="history-toppings">
           <span v-if="entry.toppings.length === 0" class="badge normal">🌭 ノーマル</span>
-          <span v-else v-for="topping in entry.toppings" :key="topping" class="badge">{{ topping }}</span>
+          <span v-else v-for="topping in entry.toppings" :key="topping.id" class="badge">{{ topping.emoji }} {{ topping.name }}</span>
         </div>
         <div class="history-footer">
-          <span class="history-date">{{ formatDisplayTimestamp(entry.createdAt) }}</span>
+          <span class="history-date">{{ formatDisplayTimestamp(entry.created_at) }}</span>
           <button 
             type="button" 
             class="delete-btn" 

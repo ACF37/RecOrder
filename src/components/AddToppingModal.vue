@@ -7,25 +7,29 @@ interface Props {
 
 interface Emits {
   (e: 'close'): void
-  (e: 'confirm', name: string): void
+  (e: 'confirm', name: string, emoji: string): void
 }
 
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
 const customToppingName = ref('')
+const customToppingEmoji = ref('')
 const modalInputRef = ref<HTMLInputElement | null>(null)
 
 const handleConfirm = () => {
-  const candidate = customToppingName.value.trim()
-  if (!candidate) return
-  emit('confirm', candidate)
+  const name = customToppingName.value.trim()
+  const emoji = customToppingEmoji.value.trim()
+  if (!name || !emoji) return
+  emit('confirm', name, emoji)
   customToppingName.value = ''
+  customToppingEmoji.value = ''
 }
 
 const handleClose = () => {
   emit('close')
   customToppingName.value = ''
+  customToppingEmoji.value = ''
 }
 
 watch(
@@ -43,17 +47,23 @@ watch(
 <template>
   <div v-if="isOpen" class="modal-backdrop" @click.self="handleClose">
     <div class="modal" tabindex="-1" @keydown.esc.prevent="handleClose">
-      <h3>Add topping</h3>
+      <h3>トッピングを追加</h3>
       <input
         ref="modalInputRef"
+        v-model="customToppingEmoji"
+        type="text"
+        placeholder="絵文字 (例: 🍅)"
+        maxlength="2"
+      />
+      <input
         v-model="customToppingName"
         type="text"
-        placeholder="New topping name"
+        placeholder="トッピング名 (例: ケチャップ)"
         @keyup.enter.prevent="handleConfirm"
       />
       <div class="modal-actions">
-        <button type="button" class="primary" @click="handleConfirm">Add</button>
-        <button type="button" class="ghost" @click="handleClose">Cancel</button>
+        <button type="button" class="primary" @click="handleConfirm">追加</button>
+        <button type="button" class="ghost" @click="handleClose">キャンセル</button>
       </div>
     </div>
   </div>
