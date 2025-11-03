@@ -415,64 +415,6 @@ export function unsubscribeFromEntries() {
   }
 }
 
-// ===== Stats用の追加エクスポート =====
-
-// 総ホットドッグ数
-export const totalHotdogs = computed(() => entries.value.length)
-
-// ユニークなトッピング数
-export const uniqueToppingsUsed = computed(() => {
-  const uniqueToppings = new Set<string>()
-  entries.value.forEach((entry) => {
-    entry.toppings.forEach((topping) => {
-      uniqueToppings.add(topping.id)
-    })
-  })
-  return uniqueToppings.size
-})
-
-// トッピング頻度（stats computed内のロジックを流用）
-export const toppingFrequency = computed(() => stats.value.toppingFrequency)
-
-// トップ3トッピング
-export const topToppings = computed(() => toppingFrequency.value.slice(0, 3))
-
-// 時間ごとの売上（24時間）
-export const hourlySales = computed(() => {
-  const hourCounts = new Map<number, number>()
-  entries.value.forEach((entry) => {
-    const date = new Date(entry.created_at)
-    const hour = date.getHours()
-    hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1)
-  })
-
-  // 0-23時のデータを作成
-  const result: Array<{ hour: number; count: number }> = []
-  for (let hour = 0; hour < 24; hour++) {
-    result.push({
-      hour,
-      count: hourCounts.get(hour) ?? 0,
-    })
-  }
-  return result
-})
-
-// タイムスタンプのフォーマット
-export function formatDisplayTimestamp(isoTimestamp: string) {
-  const parsed = new Date(isoTimestamp)
-  if (Number.isNaN(parsed.getTime())) return isoTimestamp
-  return parsed.toLocaleString(undefined, {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-// clearAllData のエイリアス（StatsView用）
-export const clearAllData = clearAllEntries
-
 // ===== LocalStorage からの移行 =====
 export async function migrateFromLocalStorage() {
   try {
